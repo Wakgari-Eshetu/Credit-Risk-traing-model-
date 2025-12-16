@@ -1,4 +1,8 @@
 pandas
 numpy
-matpolitlib
-seaborn
+seaborn 
+scikit-learn
+xverse==1.0.5
+matplotlib
+scipy
+statsmodels
