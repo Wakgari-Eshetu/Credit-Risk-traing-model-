@@ -1,42 +1,47 @@
-import sys
-import os
-
-# Add the src folder to the Python path so imports work
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
+import numpy as np
+import mlflow
 from fastapi import FastAPI
-import pandas as pd
+from contextlib import asynccontextmanager
 
-# Import your functions from data_processing.py
-from data_processing import run_task4_pipeline, process_data, build_pipeline
-
-app = FastAPI(title="Credit Risk Full Processing API")
-
-@app.post("/process-data")
-def process_data_endpoint():
-   
-    # Load raw data
-    df = pd.read_csv("../data/raw/creditriskmodeldata.csv")
-
-    # Run Task 4 pipeline (RFM + clustering + is_high_risk)
-    processed_df = run_task4_pipeline(df)
-
-    # Save processed data for training
-    processed_df.to_csv("data/processed/credit_risk_processed.csv", index=False)
-
-    #  Return summary
-    summary = {
-        "num_rows": processed_df.shape[0],
-        "num_columns": processed_df.shape[1],
-        "high_risk_count": int(processed_df['is_high_risk'].sum()),
-        "high_risk_percentage": round(processed_df['is_high_risk'].mean() * 100, 2)
-    }
-
-    return summary
+# Import Pydantic models from separate file
+from pydantic_models import PredictionRequest, PredictionResponse
 
 
-if __name__ == "__main__":
-    df = pd.read_csv("data/raw/creditriskmodeldata.csv")
-    processed_df = run_task4_pipeline(df)
-    processed_df.to_csv("data/processed/credit_risk_processed.csv", index=False)
-    print(processed_df[['CustomerId', 'is_high_risk']].head())
+# Lifespan for loading MLflow model
+
+MODEL_NAME = "CreditRiskModel"
+MODEL_STAGE = "Production"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global model
+    model_uri = f"models:/{MODEL_NAME}/{MODEL_STAGE}"
+    model = mlflow.pyfunc.load_model(model_uri)
+    print("Model loaded from MLflow Registry")
+    yield
+    # Optional cleanup
+
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="Credit Risk Prediction API",
+    description="REST API for predicting credit risk probability",
+    version="1.0",
+    lifespan=lifespan
+)
+
+
+# Health check endpoint
+
+@app.get("/")
+def health_check():
+    return {"status": "API is running"}
+
+
+# Prediction endpoint
+
+@app.post("/predict", response_model=PredictionResponse)
+def predict(request: PredictionRequest):
+    X = np.array(request.features).reshape(1, -1)
+    prediction = model.predict(X)[0]
+    return PredictionResponse(risk_probability=float(prediction))

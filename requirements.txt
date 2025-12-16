@@ -2,7 +2,12 @@ pandas
 numpy
 seaborn 
 scikit-learn
-xverse==1.0.5
+xverse
 matplotlib
 scipy
 statsmodels
+mlflow 
+pytest
+fastapi
+uvicorn
+flake8
