@@ -1,42 +1,42 @@
+import pandas as pd
 import sys
 import os
 
-# Add the src folder to the Python path so imports work
+# Add the src folder to Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from data_processing import task3_feature_pipeline
+from proxytarget import task4_proxy_target
 
-from fastapi import FastAPI
-import pandas as pd
+def main():
+    # Load raw transaction data
+    input_file = "data/raw/creditriskmodeldata.csv"
+    df = pd.read_csv(input_file)
 
-# Import your functions from data_processing.py
-from data_processing import run_task4_pipeline, process_data, build_pipeline
+    # Column setup
+    numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+    numerical_cols.remove('Amount')  # Amount is aggregated separately
 
-app = FastAPI(title="Credit Risk Full Processing API")
+    categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+    categorical_cols.remove('CustomerId')
+    categorical_cols.remove('TransactionStartTime')
 
-@app.post("/process-data")
-def process_data_endpoint():
-   
-    # Load raw data
-    df = pd.read_csv("../data/raw/creditriskmodeldata.csv")
+    # Choose encoder: 'label' or 'onehot'
+    encoding = 'label'
 
-    # Run Task 4 pipeline (RFM + clustering + is_high_risk)
-    processed_df = run_task4_pipeline(df)
+    # Run Task 3 pipeline
+    customer_features, preprocessor = task3_feature_pipeline(df, numerical_cols, categorical_cols, encoding=encoding)
 
-    # Save processed data for training
-    processed_df.to_csv("data/processed/credit_risk_processed.csv", index=False)
-
-    #  Return summary
-    summary = {
-        "num_rows": processed_df.shape[0],
-        "num_columns": processed_df.shape[1],
-        "high_risk_count": int(processed_df['is_high_risk'].sum()),
-        "high_risk_percentage": round(processed_df['is_high_risk'].mean() * 100, 2)
-    }
-
-    return summary
-
+    # Save aggregated features
+    output_file = "data/processed/task3_customer_features.csv"
+    customer_features.to_csv(output_file, index=False)
+    print(f"Task 3 customer features saved to {output_file}")
+    
+    high_risk_target = task4_proxy_target(df)
+    
+    # Merge target into features
+    final_df = customer_features.merge(high_risk_target, on='CustomerId', how='left')
+    final_df.to_csv("data/processed/customer_features_with_target.csv", index=False)
+    print("Final customer features with proxy target saved successfully.")
 
 if __name__ == "__main__":
-    df = pd.read_csv("data/raw/creditriskmodeldata.csv")
-    processed_df = run_task4_pipeline(df)
-    processed_df.to_csv("data/processed/credit_risk_processed.csv", index=False)
-    print(processed_df[['CustomerId', 'is_high_risk']].head())
+    main()
