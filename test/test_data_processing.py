@@ -1,79 +1,81 @@
+import pytest
 import pandas as pd
 import numpy as np
-import pytest
+from src.data_processing import task3_feature_pipeline
 
-from src.data_processing import process_data
-
-
-# Sample Test Dataset
-
+# ---------------------------
+# Sample DataFrame for testing
+# ---------------------------
 @pytest.fixture
-def sample_df():
+def sample_data():
     data = {
-        'CustomerID': [1, 1, 2, 2, 3],
-        'TransactionAmount': [100, 200, 150, 50, 300],
-        'TransactionDate': ['2025-12-01 10:00:00',
-                            '2025-12-01 15:00:00',
-                            '2025-12-02 12:30:00',
-                            '2025-12-02 14:45:00',
-                            '2025-12-03 09:00:00'],
-        'Gender': ['M', 'M', 'F', 'F', 'M'],
-        'PaymentMethod': ['Cash', 'Card', 'Card', 'Cash', 'Cash'],
-        'FraudResult': [0, 0, 1, 1, 0]
+        'CustomerId': ['C1', 'C1', 'C2', 'C2', 'C3'],
+        'Amount': [100, 200, 150, 300, 400],
+        'TransactionStartTime': [
+            '2025-12-01 08:00:00',
+            '2025-12-02 09:00:00',
+            '2025-12-01 10:00:00',
+            '2025-12-03 11:00:00',
+            '2025-12-01 12:00:00'
+        ],
+        'ProductCategory': ['A', 'B', 'A', 'B', 'C']
     }
     df = pd.DataFrame(data)
     return df
 
+# ---------------------------
+# Test Task 3 Pipeline
+# ---------------------------
+def test_task3_feature_pipeline(sample_data):
+    numerical_cols = ['Amount']
+    categorical_cols = ['ProductCategory']
 
-# Test the pipeline output shape
+    customer_features, preprocessor = task3_feature_pipeline(
+        sample_data, numerical_cols, categorical_cols
+    )
 
-def test_process_data_shape(sample_df):
-    X_transformed, pipeline = process_data(sample_df, target_col='FraudResult')
-    
-    # Should return a numpy array
-    assert isinstance(X_transformed, np.ndarray)
-    
-    # Number of rows should match input
-    assert X_transformed.shape[0] == sample_df.shape[0]
+    # ---------------------------
+    # Test 1: Aggregated features exist
+    # ---------------------------
+    expected_columns = [
+        'CustomerId',
+        'total_transaction_amount',
+        'avg_transaction_amount',
+        'transaction_count',
+        'std_transaction_amount'
+    ]
+    for col in expected_columns:
+        assert col in customer_features.columns, f"{col} missing in aggregated features"
 
+    # ---------------------------
+    # Test 2: Preprocessor can transform data
+    # ---------------------------
+    transformed = preprocessor.transform(sample_data)
+    assert transformed.shape[0] == sample_data.shape[0], "Row count mismatch after preprocessing"
 
-# Test WOE IV dictionary
-def test_woe_iv(sample_df):
-    _, pipeline = process_data(sample_df, target_col='FraudResult')
-    
-    woe_step = pipeline.named_steps['woe']
-    
-    # IV dictionary should exist for high-cardinality features
-    assert hasattr(woe_step, 'iv_dict')
-    
-    # IV values should be numeric
-    for iv in woe_step.iv_dict.values():
-        assert isinstance(iv, float)
+    # ---------------------------
+    # Test 3: Label encoding converts categorical columns to numeric
+    # ---------------------------
+    cat_idx = categorical_cols.index('ProductCategory')
+    encoded_column = transformed[:, len(numerical_cols) + cat_idx]  # position in ColumnTransformer output
+    assert np.issubdtype(encoded_column.dtype, np.integer) or np.issubdtype(encoded_column.dtype, np.floating), \
+        "Label encoding failed for categorical column"
 
+    # ---------------------------
+    # Test 4: DateTime features are correctly extracted
+    # ---------------------------
+    dt_features = ['transaction_hour', 'transaction_day', 'transaction_month', 'transaction_year']
+    # Use the DateTime transformer directly
+    from src.data_processing import DateTimeFeatures
+    dt_transformer = DateTimeFeatures(datetime_col='TransactionStartTime')
+    dt_result = dt_transformer.transform(sample_data)
+    for col in dt_features:
+        assert col in dt_result.columns, f"{col} missing after DateTime feature extraction"
+        assert dt_result[col].dtype in [np.int64, np.int32], f"{col} has wrong dtype"
 
-# Test that aggregate features exist after transform
-
-def test_aggregate_features(sample_df):
-    X_transformed, pipeline = process_data(sample_df, target_col='FraudResult')
-    
-    # Access aggregate features from the original dataframe after transformation
-    agg = pipeline.named_steps['agg'].transform(sample_df)
-    
-    # Check that total_amount, avg_amount, txn_count, std_amount exist
-    for col in ['total_amount', 'avg_amount', 'txn_count', 'std_amount']:
-        assert col in agg.columns
-
-
-# Test datetime feature extraction
-
-def test_datetime_features(sample_df):
-    dt_features = pipeline.named_steps['dt_features'].transform(sample_df)
-    
-    for col in ['txn_hour', 'txn_day', 'txn_month', 'txn_year']:
-        assert col in dt_features.columns
-
-
-
-
-if __name__ == "__main__":
-    pytest.main([__file__])
+    # ---------------------------
+    # Test 5: Aggregated numeric values are correct
+    # ---------------------------
+    c1_features = customer_features[customer_features['CustomerId'] == 'C1']
+    assert c1_features['total_transaction_amount'].values[0] == 300, "Total transaction amount incorrect"
+    assert c1_features['transaction_count'].values[0] == 2, "Transaction count incorrect"
