@@ -45,9 +45,9 @@ class DateTimeFeatures(BaseEstimator, TransformerMixin):
         X['transaction_year'] = X[self.datetime_col].dt.year
         return X.drop(columns=[self.datetime_col])
 
-# ---------------------------
+
 # Build Preprocessing Pipeline
-# ---------------------------
+
 def build_preprocessing_pipeline(numerical_cols, categorical_cols, encoding='label', scaling='standard'):
     # Numerical pipeline
     num_pipeline = Pipeline([
@@ -74,9 +74,9 @@ def build_preprocessing_pipeline(numerical_cols, categorical_cols, encoding='lab
 
     return preprocessor
 
-# ---------------------------
+
 # Full Task 3 Pipeline
-# ---------------------------
+
 def task3_feature_pipeline(transactions_df, numerical_cols, categorical_cols, encoding='label'):
     # 1. Aggregate customer transaction features
     aggregator = TransactionAggregator()

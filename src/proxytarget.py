@@ -2,9 +2,8 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
-# ---------------------------
 # 1. Calculate RFM
-# ---------------------------
+
 def calculate_rfm(df, customer_col='CustomerId', amount_col='Amount', date_col='TransactionStartTime', snapshot_date=None):
     df = df.copy()
     df[date_col] = pd.to_datetime(df[date_col])
@@ -28,9 +27,8 @@ def calculate_rfm(df, customer_col='CustomerId', amount_col='Amount', date_col='
     return rfm
 
 
-# ---------------------------
 # 2. Scale RFM
-# ---------------------------
+
 def scale_rfm(rfm_df):
     scaler = StandardScaler()
     rfm_scaled = rfm_df.copy()
@@ -39,17 +37,16 @@ def scale_rfm(rfm_df):
     )
     return rfm_scaled, scaler
 
-# ---------------------------
 # 3. Cluster Customers
-# ---------------------------
+
 def cluster_customers(rfm_scaled_df, n_clusters=3, random_state=42):
     kmeans = KMeans(n_clusters=n_clusters, random_state=random_state)
     rfm_scaled_df['cluster'] = kmeans.fit_predict(rfm_scaled_df[['Recency','Frequency','Monetary']])
     return rfm_scaled_df, kmeans
 
-# ---------------------------
+
 # 4. Assign High-Risk Label
-# ---------------------------
+
 def assign_high_risk_label(rfm_scaled_df, original_rfm_df):
     cluster_stats = original_rfm_df.groupby('cluster').agg({
         'Recency':'mean',
@@ -64,9 +61,8 @@ def assign_high_risk_label(rfm_scaled_df, original_rfm_df):
     original_rfm_df['is_high_risk'] = (original_rfm_df['cluster'] == high_risk_cluster).astype(int)
     return original_rfm_df[['CustomerId','is_high_risk']]
 
-# ---------------------------
 # 5. Full Task 4 Pipeline
-# ---------------------------
+
 def task4_proxy_target(transactions_df, snapshot_date=None):
     rfm = calculate_rfm(transactions_df, snapshot_date=snapshot_date)
     rfm_scaled, _ = scale_rfm(rfm)

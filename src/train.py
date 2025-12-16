@@ -1,5 +1,3 @@
-# src/model_training.py
-
 import pandas as pd
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
@@ -8,9 +6,9 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import mlflow
 import mlflow.sklearn
 
-# ---------------------------
-# 1️⃣ Load Processed Data
-# ---------------------------
+
+# 1. Load Processed Data
+
 data_file = "data/processed/customer_features_with_target.csv"
 df = pd.read_csv(data_file)
 
@@ -22,9 +20,8 @@ y = df['is_high_risk']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2,
                                                     random_state=42, stratify=y)
 
-# ---------------------------
-# 2️⃣ Model Training Function
-# ---------------------------
+# 2. Model Training Function
+
 def train_models(X_train, y_train):
     models = {}
     params = {}
@@ -56,9 +53,8 @@ def train_models(X_train, y_train):
         print(f"{name} best params: {grid.best_params_}")
     return best_models
 
-# ---------------------------
-# 3️⃣ Evaluation Function
-# ---------------------------
+# 3. Evaluation Function
+
 def evaluate_model(model, X_test, y_test):
     y_pred = model.predict(X_test)
     y_proba = model.predict_proba(X_test)[:,1]
@@ -72,9 +68,7 @@ def evaluate_model(model, X_test, y_test):
     }
     return metrics
 
-# ---------------------------
-# 4️⃣ MLflow Tracking
-# ---------------------------
+# 4. MLflow tracking 
 def track_experiments(best_models, X_test, y_test, experiment_name="CreditRisk_Models"):
     mlflow.set_experiment(experiment_name)
     for name, model in best_models.items():
@@ -90,9 +84,9 @@ def track_experiments(best_models, X_test, y_test, experiment_name="CreditRisk_M
             
             print(f"{name} logged to MLflow with metrics: {metrics}")
 
-# ---------------------------
-# 5️⃣ Main Execution
-# ---------------------------
+
+# 5. Main Execution
+
 def main():
     best_models = train_models(X_train, y_train)
     track_experiments(best_models, X_test, y_test)
