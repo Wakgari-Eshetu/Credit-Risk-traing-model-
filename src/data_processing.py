@@ -1,61 +1,105 @@
-import pandas as pd 
+import pandas as pd
 import numpy as np
-from sklearn.preprocessing import OneHotEncoder
 
-#Pipeline Structure for dataset 
-df = pd.read_csv(r"C:\Users\HP\Downloads\Telegram Desktop\CreditRisk probabilitymodel\data\raw\creditriskmodeldata.csv")
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
 
-#Identify feature types
-categorical_cols = []
-numerical_cols = []
+from xverse.transformer import WOE  
 
-for col in df.columns:
-    if 'id' in col.lower():
-        categorical_cols.append(col)
-    elif df[col].dtype == 'object':
-        categorical_cols.append(col)
-    elif df[col].dtype in['int64','float64'] and df[col].nunique()<20:
-        categorical_cols.append(col)
-    else:
-        numerical_cols.append(col)
+#Transaction Aggregator
+class TransactionAggregator(BaseEstimator, TransformerMixin):
+    def __init__(self, customer_id_col='CustomerID', amount_col='TransactionAmount'):
+        self.customer_id_col = customer_id_col
+        self.amount_col = amount_col
 
-print("Categorical col: ",categorical_cols)
-print("Numerical col: ",numerical_cols)
+    def fit(self, X, y=None):
+        return self
 
-#Create Aggregate Features per customer using groupby 
-agg_features = df.groupby('CustomerId')['Amount'].agg(
-    Total_Transaction_Amount='sum',
-    Average_Transaction_Amount='mean',
-    Transaction_Count='count',
-    Std_Transaction_Amount='std'
-).reset_index()
+    def transform(self, X):
+        X = X.copy()
+        agg = X.groupby(self.customer_id_col)[self.amount_col].agg(
+            total_amount='sum',
+            avg_amount='mean',
+            txn_count='count',
+            std_amount='std'
+        ).reset_index()
+        X = X.merge(agg, on=self.customer_id_col, how='left')
+        return X
 
-agg_features['Std_Transaction_Amount'].fillna(0, inplace=True)
+#Datetime Features
 
-print(agg_features.head())
-#Merge with the original df
+class DateTimeFeatures(BaseEstimator, TransformerMixin):
+    def __init__(self, datetime_col='TransactionDate'):
+        self.datetime_col = datetime_col
 
-df = df.merge(agg_features,on="CustomerId",how='left')
+    def fit(self, X, y=None):
+        return self
 
-print(df.head())
+    def transform(self, X):
+        X = X.copy()
+        X[self.datetime_col] = pd.to_datetime(X[self.datetime_col])
+        X['txn_hour'] = X[self.datetime_col].dt.hour
+        X['txn_day'] = X[self.datetime_col].dt.day
+        X['txn_month'] = X[self.datetime_col].dt.month
+        X['txn_year'] = X[self.datetime_col].dt.year
+        return X
 
-#Extracting Time feature 
+#WOE Encoder for High-Cardinality Features
 
-#But first let change the TransactionStartTime to datatime 
+class WOEEncoderXverse(BaseEstimator, TransformerMixin):
+    def __init__(self, woe_cols, target):
+        self.woe_cols = woe_cols
+        self.target = target
+        self.woe_encoder = None
 
-df['TransactionStartTime'] = pd.to_datetime(df['TransactionStartTime'])
-#Now lets create time feature for modeling 
+    def fit(self, X, y=None):
+        self.woe_encoder = WOE(columns=self.woe_cols)
+        self.woe_encoder.fit(X, X[self.target])
+        return self
 
-df['TransactionHour'] = df['TransactionStartTime'].dt.hour #for hour 
-df['TransactionDay'] = df['TransactionStartTime'].dt.day #for day
-df['TransactionMonth'] = df['TransactionStartTime'].dt.month #for month
-df['TransactionYear'] = df['TransactionStartTime'].dt.year #for year
+    def transform(self, X):
+        return self.woe_encoder.transform(X)
 
-# Create encoder to encode categorical variable using onehotencoder method 
-#encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-#encoded_array = encoder.fit_transform(df[categorical_cols])
-#encoded_df = pd.DataFrame(encoded_array, columns=encoder.get_feature_names_out(categorical_cols))
-#df_final = pd.concat([df.drop(columns=categorical_cols), encoded_df], axis=1)
+#Build the Full Pipeline
 
-#lets handle missing value using Imputation 
+def build_pipeline(low_card_cat_cols, numerical_cols, woe_cols, target_col):
+    # Pipeline for low-cardinality categorical features
+    cat_pipeline = Pipeline([
+        ('imputer', SimpleImputer(strategy='most_frequent')),
+        ('onehot', OneHotEncoder(handle_unknown='ignore'))
+    ])
+
+    # Pipeline for numerical features
+    num_pipeline = Pipeline([
+        ('imputer', SimpleImputer(strategy='median')),
+        ('scaler', StandardScaler())
+    ])
+
+    # ColumnTransformer
+    preprocessor = ColumnTransformer([
+        ('cat', cat_pipeline, low_card_cat_cols),
+        ('num', num_pipeline, numerical_cols)
+    ])
+
+    # Full pipeline
+    full_pipeline = Pipeline([
+        ('agg', TransactionAggregator()),
+        ('dt_features', DateTimeFeatures()),
+        ('woe', WOEEncoderXverse(woe_cols=woe_cols, target=target_col)),
+        ('preprocessor', preprocessor)
+    ])
+
+    return full_pipeline
+
+#Optional: Fit & Transform Function
+
+def process_data(df, low_card_cat_cols, numerical_cols, woe_cols, target_col):
+    pipeline = build_pipeline(low_card_cat_cols, numerical_cols, woe_cols, target_col)
+    X_transformed = pipeline.fit_transform(df)
+    return X_transformed
+
+
 
