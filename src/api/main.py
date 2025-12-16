@@ -1,42 +1,47 @@
-import pandas as pd
-import sys
-import os
+import numpy as np
+import mlflow
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
 
-# Add the src folder to Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from data_processing import task3_feature_pipeline
-from proxytarget import task4_proxy_target
+# Import Pydantic models from separate file
+from pydantic_models import PredictionRequest, PredictionResponse
 
-def main():
-    # Load raw transaction data
-    input_file = "data/raw/creditriskmodeldata.csv"
-    df = pd.read_csv(input_file)
 
-    # Column setup
-    numerical_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
-    numerical_cols.remove('Amount')  # Amount is aggregated separately
+# Lifespan for loading MLflow model
 
-    categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
-    categorical_cols.remove('CustomerId')
-    categorical_cols.remove('TransactionStartTime')
+MODEL_NAME = "CreditRiskModel"
+MODEL_STAGE = "Production"
 
-    # Choose encoder: 'label' or 'onehot'
-    encoding = 'label'
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global model
+    model_uri = f"models:/{MODEL_NAME}/{MODEL_STAGE}"
+    model = mlflow.pyfunc.load_model(model_uri)
+    print("Model loaded from MLflow Registry")
+    yield
+    # Optional cleanup
 
-    # Run Task 3 pipeline
-    customer_features, preprocessor = task3_feature_pipeline(df, numerical_cols, categorical_cols, encoding=encoding)
 
-    # Save aggregated features
-    output_file = "data/processed/task3_customer_features.csv"
-    customer_features.to_csv(output_file, index=False)
-    print(f"Task 3 customer features saved to {output_file}")
-    
-    high_risk_target = task4_proxy_target(df)
-    
-    # Merge target into features
-    final_df = customer_features.merge(high_risk_target, on='CustomerId', how='left')
-    final_df.to_csv("data/processed/customer_features_with_target.csv", index=False)
-    print("Final customer features with proxy target saved successfully.")
+# Initialize FastAPI app
+app = FastAPI(
+    title="Credit Risk Prediction API",
+    description="REST API for predicting credit risk probability",
+    version="1.0",
+    lifespan=lifespan
+)
 
-if __name__ == "__main__":
-    main()
+
+# Health check endpoint
+
+@app.get("/")
+def health_check():
+    return {"status": "API is running"}
+
+
+# Prediction endpoint
+
+@app.post("/predict", response_model=PredictionResponse)
+def predict(request: PredictionRequest):
+    X = np.array(request.features).reshape(1, -1)
+    prediction = model.predict(X)[0]
+    return PredictionResponse(risk_probability=float(prediction))

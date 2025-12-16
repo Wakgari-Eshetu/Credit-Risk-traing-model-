@@ -5,9 +5,9 @@ from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
-# ---------------------------
+
 # Aggregate Transaction Features
-# ---------------------------
+
 class TransactionAggregator(BaseEstimator, TransformerMixin):
     def __init__(self, customer_col='CustomerId', amount_col='Amount'):
         self.customer_col = customer_col
@@ -26,9 +26,9 @@ class TransactionAggregator(BaseEstimator, TransformerMixin):
         agg_df['std_transaction_amount'] = agg_df['std_transaction_amount'].fillna(0)
         return agg_df
 
-# ---------------------------
+
 # DateTime Feature Extraction
-# ---------------------------
+
 class DateTimeFeatures(BaseEstimator, TransformerMixin):
     def __init__(self, datetime_col='TransactionStartTime'):
         self.datetime_col = datetime_col
@@ -91,3 +91,6 @@ def task3_feature_pipeline(transactions_df, numerical_cols, categorical_cols, en
     preprocessor.fit(transactions_with_dt)
 
     return customer_features, preprocessor
+
+
+
