@@ -4,9 +4,9 @@ import pytest
 
 from src.data_processing import process_data
 
-# ----------------------------
+
 # Sample Test Dataset
-# ----------------------------
+
 @pytest.fixture
 def sample_df():
     data = {
@@ -24,9 +24,9 @@ def sample_df():
     df = pd.DataFrame(data)
     return df
 
-# ----------------------------
+
 # Test the pipeline output shape
-# ----------------------------
+
 def test_process_data_shape(sample_df):
     X_transformed, pipeline = process_data(sample_df, target_col='FraudResult')
     
@@ -36,9 +36,8 @@ def test_process_data_shape(sample_df):
     # Number of rows should match input
     assert X_transformed.shape[0] == sample_df.shape[0]
 
-# ----------------------------
+
 # Test WOE IV dictionary
-# ----------------------------
 def test_woe_iv(sample_df):
     _, pipeline = process_data(sample_df, target_col='FraudResult')
     
@@ -51,9 +50,9 @@ def test_woe_iv(sample_df):
     for iv in woe_step.iv_dict.values():
         assert isinstance(iv, float)
 
-# ----------------------------
+
 # Test that aggregate features exist after transform
-# ----------------------------
+
 def test_aggregate_features(sample_df):
     X_transformed, pipeline = process_data(sample_df, target_col='FraudResult')
     
@@ -64,17 +63,17 @@ def test_aggregate_features(sample_df):
     for col in ['total_amount', 'avg_amount', 'txn_count', 'std_amount']:
         assert col in agg.columns
 
-# ----------------------------
+
 # Test datetime feature extraction
-# ----------------------------
+
 def test_datetime_features(sample_df):
     dt_features = pipeline.named_steps['dt_features'].transform(sample_df)
     
     for col in ['txn_hour', 'txn_day', 'txn_month', 'txn_year']:
         assert col in dt_features.columns
 
-# ----------------------------
-# Run with pytest
-# ----------------------------
+
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
